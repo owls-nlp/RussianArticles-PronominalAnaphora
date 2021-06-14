@@ -1,0 +1,149 @@
+---
+title: "Final project"
+output: html_notebook
+---
+```{r}
+#install.packages("data.table")
+#install.packages("caret")
+# install.packages('e1071', dependencies = TRUE)
+library(data.table)
+library(caret)
+library(ggplot2)
+```
+
+Lets load data set
+
+```{r}
+data <- read.csv('https://raw.githubusercontent.com/owls-nlp/RussianArticles-PronominalAnaphora/main/final_corpus.csv')
+```
+
+Lets do some EDA
+
+```{r}
+qplot(data$label, geom="histogram", binwidth = 0.5, main = "Histogram for target", xlab = "Labels count")
+```
+
+Save labels
+
+```{r}
+labels <- data$label
+```
+
+Drop usless columns
+
+```{r}
+data$label <- NULL
+data$first_word <- NULL
+data$second_word <- NULL
+data$X <- NULL
+```
+
+Save only one numeric columns and drop it
+
+```{r}
+dist <- data$dist
+data$dist <- NULL
+```
+
+Lets do one-hot encoding for data preprocessing
+
+```{r}
+one_hot_encoding = function(df, columns){
+  # create a copy of the original data.frame for not modifying the original
+  df = cbind(df)
+  # convert the columns to vector in case it is a string
+  columns = c(columns)
+  # for each variable perform the One hot encoding
+  for (column in columns){
+    unique_values = sort(unique(df[column])[,column])
+    non_reference_values  = unique_values[c(-1)] # the first element is going 
+                                                 # to be the reference by default
+    for (value in non_reference_values){
+      # the new dummy column name
+      new_col_name = paste0(column,'.',value)
+      # create new dummy column for each value of the non_reference_values
+      df[new_col_name] <- with(df, ifelse(df[,column] == value, 1, 0))
+    }
+    # delete the one hot encoded column
+    df[column] = NULL
+
+  }
+  return(df)
+}
+```
+
+
+```{r}
+df = one_hot_encoding(data, colnames(data))
+```
+
+Add numeric value and target
+
+```{r}
+normalize <- function(x, na.rm = TRUE) {
+    return((x- min(x)) /(max(x)-min(x)))
+}
+
+dist = normalize(dist)
+
+
+df$label = labels
+df$dist = dist
+```
+
+
+Train test split
+
+```{r}
+set.seed(101)
+sample <- sample.int(n = nrow(df), size = floor(.75*nrow(df)), replace = F)
+train <- df[sample, ]
+test  <- df[-sample, ]
+```
+
+Create model
+
+```{r}
+model <- glm(label ~., data = train, family = binomial)
+```
+
+```{r}
+summary(model)
+```
+
+```{r}
+probabilities <- predict(model, test, type = "response")
+```
+
+```{r}
+pred_classes <- ifelse(probabilities > 0.13, 1, 0)
+```
+
+```{r}
+hist(pred_classes)
+```
+
+```{r}
+test$label = as.factor(test$label)
+
+precision <- posPredValue(as.factor(pred_classes), test$label, positive="1")
+recall <- sensitivity(as.factor(pred_classes), test$label, positive="1")
+
+F1 <- (2 * precision * recall) / (precision + recall)
+```
+
+```{r}
+print(precision)
+```
+
+```{r}
+print(recall)
+```
+
+```{r}
+print(F1)
+```
+
+
+
+
