@@ -17,4 +17,4 @@
 
 
 
-Для извлечения данных признаков использовался pymorphy2 - морфологический анализатор для русского языка, написанный на языке Python и использующий словари из OpenCorpora. [Korobov M. Morphological analyzer and generator for Russian and Ukrainian languages //International Conference on Analysis of Images, Social Networks and Texts. – Springer, Cham, 2015. – С. 320-332.]
+Для извлечения данных признаков использовался pymorphy2 - морфологический анализатор для русского языка, написанный на языке Python и использующий словари из OpenCorpora. 
