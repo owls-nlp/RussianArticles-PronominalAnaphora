@@ -1,0 +1,293 @@
+---
+title: "Final project"
+output: html_notebook
+---
+```{r}
+#install.packages("data.table")
+#install.packages("caret")
+# install.packages('e1071', dependencies = TRUE)
+# install.packages("vip")
+# install.packages("randomForest")
+library(data.table)
+library(caret)
+library(ggplot2)
+library(vip)
+library(randomForest)
+```
+
+Lets load data set
+
+```{r}
+data <- read.csv('https://raw.githubusercontent.com/owls-nlp/RussianArticles-PronominalAnaphora/main/final_corpus.csv')
+```
+
+Lets do some EDA
+
+```{r}
+qplot(data$label, geom="histogram", binwidth = 0.5, main = "Histogram for target", xlab = "Labels count")
+```
+
+Lets do more EDA
+first_POS
+```{r}
+g <- ggplot(data, aes(label))
+g + geom_bar(aes(fill = first_POS))
+
+```
+first_animacy
+```{r}
+g <- ggplot(data, aes(label))
+g + geom_bar(aes(fill = first_animacy))
+
+```
+
+
+first_gender
+```{r}
+g <- ggplot(data, aes(label))
+g + geom_bar(aes(fill = first_gender))
+
+```
+
+first_number
+```{r}
+g <- ggplot(data, aes(label))
+g + geom_bar(aes(fill = first_number))
+
+```
+first_case
+```{r}
+g <- ggplot(data, aes(label))
+g + geom_bar(aes(fill = first_case))
+
+```
+second_person
+```{r}
+g <- ggplot(data, aes(label))
+g + geom_bar(aes(fill = second_person))
+
+```
+
+second_case
+```{r}
+g <- ggplot(data, aes(label))
+g + geom_bar(aes(fill = second_case))
+
+```
+
+second_number
+```{r}
+g <- ggplot(data, aes(label))
+g + geom_bar(aes(fill = second_number))
+
+```
+dist
+```{r}
+ggplot(data = data, aes(x = dist)) +
+  geom_histogram(fill = "yellowgreen", 
+                 color = "black",
+                 bins=50)  + xlim(0, 70)
+```
+
+
+Save labels
+
+```{r}
+labels <- data$label
+```
+
+Drop usless columns
+
+```{r}
+data$label <- NULL
+data$first_word <- NULL
+data$second_word <- NULL
+data$X <- NULL
+```
+
+Save only one numeric columns and drop it
+
+```{r}
+dist <- data$dist
+data$dist <- NULL
+```
+
+Lets do one-hot encoding for data preprocessing
+
+```{r}
+one_hot_encoding = function(df, columns){
+  # create a copy of the original data.frame for not modifying the original
+  df = cbind(df)
+  # convert the columns to vector in case it is a string
+  columns = c(columns)
+  # for each variable perform the One hot encoding
+  for (column in columns){
+    unique_values = sort(unique(df[column])[,column])
+    non_reference_values  = unique_values[c(-1)] # the first element is going 
+                                                 # to be the reference by default
+    for (value in non_reference_values){
+      # the new dummy column name
+      new_col_name = paste0(column,'.',value)
+      # create new dummy column for each value of the non_reference_values
+      df[new_col_name] <- with(df, ifelse(df[,column] == value, 1, 0))
+    }
+    # delete the one hot encoded column
+    df[column] = NULL
+
+  }
+  return(df)
+}
+```
+
+
+```{r}
+# df = one_hot_encoding(data, colnames(data))
+df = data
+```
+
+Add numeric value and target
+
+```{r}
+normalize <- function(x, na.rm = TRUE) {
+    return((x- min(x)) /(max(x)-min(x)))
+}
+
+dist = normalize(dist)
+
+
+df$label = labels
+df$dist = dist
+```
+
+Show unique values
+```{r}
+lapply(df, unique)
+```
+Drop constants
+
+```{r}
+df$first_POS <- NULL
+df$second_POS <- NULL
+df$second_person <- NULL
+```
+
+
+
+Train test split
+
+```{r}
+set.seed(101)
+
+rows <- sample(nrow(df))
+df <- df[rows, ]
+
+sample <- sample.int(n = nrow(df), size = floor(.75*nrow(df)), replace = F)
+train <- df[sample, ]
+test  <- df[-sample, ]
+```
+
+Create model
+
+```{r}
+model <- glm(label ~., data = train, family = binomial)
+```
+
+```{r}
+summary(model)
+```
+
+```{r}
+probabilities <- predict(model, test, type = "response")
+```
+
+```{r}
+pred_classes <- ifelse(probabilities > 0.13, 1, 0)
+```
+
+```{r}
+hist(pred_classes)
+```
+
+```{r}
+test$label = as.factor(test$label)
+
+precision <- posPredValue(as.factor(pred_classes), test$label, positive="1")
+recall <- sensitivity(as.factor(pred_classes), test$label, positive="1")
+
+F1 <- (2 * precision * recall) / (precision + recall)
+```
+
+```{r}
+print(precision)
+```
+
+```{r}
+print(recall)
+```
+
+```{r}
+print(F1)
+```
+
+Feature importance
+
+```{r}
+backward <- step(model, direction = "backward", trace = 0)
+
+vi(backward)
+
+# Plot VI scores
+p1 <- vip(backward, num_features = length(coef(backward)), 
+          geom = "point", horizontal = TRUE)
+p2 <- vip(backward, num_features = length(coef(backward)), 
+          geom = "point", horizontal = TRUE, 
+          mapping = aes_string(color = "Sign"))
+grid.arrange(p1, p2, nrow = 1)
+```
+Random forest
+
+```{r}
+train$label = as.factor(train$label)
+test$label = as.factor(test$label)
+rf = randomForest(label ~., data=train, ntree=100, importance=TRUE, proximity=T)
+```
+
+
+```{r}
+imp_rf <- importance(rf)
+```
+
+
+
+```{r}
+rf_pred = predict(rf, newdata=test, "prob")
+
+colnames(rf_pred) <- c('neg', 'pos')
+
+
+rf_pred = rf_pred[, 'pos']
+
+pred_classes <- ifelse(rf_pred > 0.05, 1, 0)
+
+precision <- posPredValue(as.factor(pred_classes), test$label, positive="1")
+recall <- sensitivity(as.factor(pred_classes), test$label, positive="1")
+
+F1 <- (2 * precision * recall) / (precision + recall)
+```
+
+
+```{r}
+F1
+```
+
+```{r}
+precision
+```
+
+
+```{r}
+recall
+```
+
+
+
